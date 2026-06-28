@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chuyển đổi PDF/Ảnh sang LaTeX & Word</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- FontAwesome for UI components -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PDF.js for rendering PDF pages to images -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <!-- Docx & FileSaver for exporting to Word (.docx) -->
+    <script src="https://unpkg.com/docx@8.2.3/build/index.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- MathJax để render công thức trực quan trong tab xem trước -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <style>
+        body {
+            background-color: #f3f4f6;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        /* Custom scrollbar for better visual */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col pb-12">
+
+    <!-- Header Bar -->
+    <header class="bg-indigo-700 text-white shadow-lg px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-square-root-variable text-2xl text-yellow-300"></i>
+            <h1 class="text-xl font-bold tracking-tight">HỆ THỐNG BIÊN SOẠN TOÁN HỌC THÔNG MINH (HỖ TRỢ ĐA TRANG & HÌNH VẼ)</h1>
+        </div>
+        <div class="text-sm bg-indigo-800 px-3 py-1.5 rounded-lg border border-indigo-500/30 flex items-center gap-2">
+            <span class="inline-block w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse"></span>
+            Tối ưu hóa dung lượng PDF lớn
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="max-w-7xl w-full mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 flex-grow">
+        
+        <!-- LEFT COLUMN: Inputs & Files -->
+        <div class="flex flex-col space-y-6">
+            
+            <!-- 1) Ô NHẬP FILE PDF, PASTE ẢNH -->
+            <div class="bg-white rounded-xl shadow-md p-5 border border-gray-100 relative">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-md font-bold text-gray-800 flex items-center gap-2">
+                        <span class="w-2.5 h-5 bg-indigo-600 rounded-full inline-block"></span>
+                        1) Nhập File PDF / Ảnh câu hỏi
+                    </h2>
+                    <!-- Nút lệnh Paste ảnh phía trên góc phải -->
+                    <button id="btn-paste" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-1.5 px-3 rounded-lg border border-indigo-200 flex items-center gap-1.5 transition-all">
+                        <i class="fa-regular fa-clipboard"></i>
+                        Dán ảnh từ Clipboard (Ctrl+V)
+                    </button>
+                </div>
+
+                <!-- Drag & Drop Zone -->
+                <div id="drop-zone" class="border-2 border-dashed border-gray-300 hover:border-indigo-500 rounded-xl p-8 flex flex-col items-center justify-center transition-all bg-gray-50/50 cursor-pointer relative group min-h-[160px]">
+                    <input type="file" id="file-input" accept="image/*,application/pdf" class="hidden">
+                    <div class="text-center space-y-2 pointer-events-none">
+                        <div class="text-indigo-500 group-hover:scale-110 transition-transform duration-300">
+                            <i class="fa-solid fa-cloud-arrow-up text-4xl"></i>
+                        </div>
+                        <p class="text-sm font-medium text-gray-700">Kéo thả File PDF hoặc Ảnh vào đây</p>
+                        <p class="text-xs text-gray-400">Hỗ trợ PDF nhiều trang hoặc Ảnh dán trực tiếp</p>
+                        <button class="mt-2 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold px-4 py-1.5 rounded-lg shadow-sm">
+                            Chọn tệp...
+                        </button>
+                    </div>
+                </div>
+
+                <!-- API Configuration Warning if Any -->
+                <div class="mt-3 flex items-center justify-between text-xs text-gray-500 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                    <span class="flex items-center gap-1"><i class="fa-solid fa-shield-halved text-indigo-500"></i> Sử dụng công nghệ xử lý tuần tự an toàn</span>
+                    <span id="api-status" class="font-semibold text-green-600">Đã kích hoạt</span>
+                </div>
+            </div>
+
+            <!-- 2) Ô NHẬP HỒ SƠ TẬP TIN -->
+            <div class="bg-white rounded-xl shadow-md p-5 border border-gray-100 flex-grow flex flex-col min-h-[350px]">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-md font-bold text-gray-800 flex items-center gap-2">
+                        <span class="w-2.5 h-5 bg-indigo-600 rounded-full inline-block"></span>
+                        2) Ô nhận dạng tệp tải lên
+                    </h2>
+                    <!-- PDF Selector Controls (Select All / Deselect) -->
+                    <div id="pdf-selection-controls" class="hidden flex items-center gap-2">
+                        <button id="btn-select-all-pages" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-1 px-2.5 rounded border border-indigo-200 transition-all">
+                            Chọn tất cả
+                        </button>
+                        <button id="btn-deselect-all-pages" class="text-[11px] bg-gray-50 hover:bg-gray-100 text-gray-600 py-1 px-2.5 rounded border border-gray-200 transition-all">
+                            Bỏ chọn hết
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Preview Viewport -->
+                <div id="preview-container" class="flex-grow border border-gray-100 rounded-lg bg-gray-50 flex flex-col items-center justify-center p-4 relative overflow-y-auto max-h-[500px]">
+                    <!-- Placeholder -->
+                    <div id="preview-placeholder" class="text-center text-gray-400 space-y-2 py-12">
+                        <i class="fa-regular fa-image text-5xl text-gray-300"></i>
+                        <p class="text-sm">Chưa có tệp nào được tải lên để hiển thị.</p>
+                        <p class="text-xs text-gray-400">Hình ảnh hoặc danh sách các trang PDF chọn lọc sẽ hiện ở đây</p>
+                    </div>
+
+                    <!-- Image Preview -->
+                    <img id="image-preview" src="" alt="Xem trước tệp ảnh" class="max-w-full max-h-[380px] object-contain hidden rounded shadow-sm border border-gray-200">
+
+                    <!-- PDF Multi-page Grid and Canvas Workspace -->
+                    <div id="pdf-preview-container" class="hidden w-full flex flex-col space-y-4">
+                        
+                        <!-- Scrollable Grid of Page selection checkboxes -->
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+                            <p class="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wider">Chọn các trang cần xử lý biên dịch:</p>
+                            <div id="pdf-pages-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2 max-h-[120px] overflow-y-auto p-1 bg-gray-50 rounded border border-gray-100">
+                                <!-- Checkboxes injected dynamically here -->
+                            </div>
+                        </div>
+
+                        <!-- Current Preview Page Canvas area -->
+                        <div class="flex flex-col items-center space-y-2 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+                            <div class="flex items-center space-x-3">
+                                <button id="pdf-prev" class="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent">
+                                    <i class="fa-solid fa-chevron-left text-sm"></i>
+                                </button>
+                                <span class="text-xs font-semibold text-gray-600" id="pdf-page-num">Trang 0 / 0</span>
+                                <button id="pdf-next" class="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent">
+                                    <i class="fa-solid fa-chevron-right text-sm"></i>
+                                </button>
+                            </div>
+                            <canvas id="pdf-canvas" class="max-w-full border shadow-sm rounded bg-white max-h-[280px] object-contain"></canvas>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: Compilation & Output -->
+        <div class="flex flex-col space-y-6">
+
+            <!-- CONTROL COMMAND BUTTONS -->
+            <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100 flex flex-wrap gap-3">
+                <!-- 4) Nút biên dịch sang latex -->
+                <button id="btn-compile" class="flex-1 min-w-[140px] bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold py-3 px-4 rounded-lg shadow flex items-center justify-center gap-2 transition-all transform active:scale-95">
+                    <i class="fa-solid fa-calculator"></i>
+                    Biên dịch sang LaTeX
+                </button>
+                
+                <!-- 5) Nút giải chi tiết -->
+                <button id="btn-solution-detail" class="flex-1 min-w-[140px] bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold py-3 px-4 rounded-lg shadow flex items-center justify-center gap-2 transition-all transform active:scale-95">
+                    <i class="fa-solid fa-list-check"></i>
+                    Giải chi tiết
+                </button>
+                
+                <!-- 6) Nút giải nhanh -->
+                <button id="btn-solution-fast" class="flex-1 min-w-[140px] bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold py-3 px-4 rounded-lg shadow flex items-center justify-center gap-2 transition-all transform active:scale-95">
+                    <i class="fa-solid fa-bolt"></i>
+                    Giải nhanh
+                </button>
+            </div>
+            
+            <!-- 3) Ô BIÊN DỊCH LATEX -->
+            <div class="bg-white rounded-xl shadow-md p-5 border border-gray-100 flex-grow flex flex-col min-h-[400px]">
+                <div class="flex justify-between items-center mb-1">
+                    <h2 class="text-md font-bold text-gray-800 flex items-center gap-2">
+                        <span class="w-2.5 h-5 bg-indigo-600 rounded-full inline-block"></span>
+                        3) Ô biên dịch LaTeX (Chuẩn công thức Toán học)
+                    </h2>
+                    <div class="flex items-center space-x-2">
+                        <span id="current-mode-badge" class="text-xs bg-gray-100 text-gray-600 font-semibold px-2.5 py-1 rounded-full border border-gray-200">
+                            Chế độ: Đang chờ
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Tab bar for viewing raw LaTeX vs Live Rendered Math Preview -->
+                <div class="flex border-b border-gray-200 mb-3">
+                    <button onclick="switchOutputTab('raw')" id="tab-btn-raw" class="px-4 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 focus:outline-none transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-code"></i> Mã nguồn LaTeX
+                    </button>
+                    <button onclick="switchOutputTab('rendered')" id="tab-btn-rendered" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-eye"></i> Xem trước hiển thị
+                    </button>
+                </div>
+                
+                <div class="flex-grow flex flex-col relative min-h-[300px]">
+                    <!-- Textarea for result LaTeX (Active by default) -->
+                    <textarea id="latex-output" class="w-full flex-grow p-4 border border-gray-200 rounded-lg font-mono text-sm bg-gray-900 text-green-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none resize-none min-h-[300px]" placeholder="% Mã nguồn LaTeX biên dịch chuẩn toán học và lời giải sẽ xuất hiện ở đây..."></textarea>
+                    
+                    <!-- Rendered MathJax view (Hidden by default) -->
+                    <div id="math-preview-pane" class="hidden w-full flex-grow p-6 border border-gray-300 rounded-lg bg-white dark:bg-slate-900 overflow-y-auto max-h-[550px] shadow-inner select-text">
+                        <!-- Paper styled container mimicking ministry printed exams -->
+                        <div id="math-preview-content" class="text-[15.5px] text-slate-900 dark:text-slate-100 leading-relaxed font-serif tracking-normal" style="font-family: 'Times New Roman', Times, serif;">
+                            <span class="text-gray-400 italic">Chưa có nội dung để xem trước. Nhấn biên dịch để nạp dữ liệu.</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading overlay with progressive status -->
+                    <div id="loader" class="absolute inset-0 bg-white/90 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center space-y-4 hidden z-20">
+                        <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                        <div class="text-center space-y-1">
+                            <p class="text-sm font-bold text-gray-800 animate-pulse" id="loader-text">Đang nhận diện tài liệu...</p>
+                            <p class="text-xs text-gray-500 font-semibold" id="loader-progress"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Download Word Document Area -->
+                <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                    <p class="text-xs text-gray-500 max-w-[65%] leading-relaxed">
+                        <i class="fa-solid fa-info-circle text-indigo-500 mr-1"></i>
+                        Tải file Word (.docx) chứa chuẩn LaTeX để sử dụng <strong>MathType</strong> quét và chuyển đổi công thức hàng loạt nhanh chóng.
+                    </p>
+                    <button id="btn-download-word" class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-bold py-2.5 px-5 rounded-lg shadow-md flex items-center gap-2 transition-all" disabled>
+                        <i class="fa-solid fa-file-word"></i>
+                        Tải file Word .docx
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Interactive Status Bar -->
+    <div id="toast-message" class="fixed bottom-4 right-4 bg-gray-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2">
+        <i class="fa-solid fa-info"></i>
+        <span id="toast-text">Đang thực hiện...</span>
+    </div>
+
+    <script>
+        // PDFJS Config
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        // State variables
+        let appState = {
+            activeImageBase64: null, // Only used when user uploads a single image or pastes from clipboard
+            pdfDocument: null,
+            pdfCurrentPage: 1,
+            pdfTotalPages: 0,
+            selectedPages: [], // Array of selected page numbers (e.g. [1, 2, 5])
+            compiledContent: "", // Holds final concatenated output string
+            uploadedFileName: "", // Tên file tải lên gốc hoặc tên dán tự động
+            pasteCounter: 0       // Đếm số lần dán ảnh
+        };
+
+        // Constants
+        const API_KEY = ""; // Dynamic auth key supplied in sandbox environment
+        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+
+        // DOM Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const btnPaste = document.getElementById('btn-paste');
+        const previewPlaceholder = document.getElementById('preview-placeholder');
+        const imagePreview = document.getElementById('image-preview');
+        const pdfPreviewContainer = document.getElementById('pdf-preview-container');
+        const pdfCanvas = document.getElementById('pdf-canvas');
+        const pdfPrevBtn = document.getElementById('pdf-prev');
+        const pdfNextBtn = document.getElementById('pdf-next');
+        const pdfPageNumSpan = document.getElementById('pdf-page-num');
+        const pdfPagesGrid = document.getElementById('pdf-pages-grid');
+        const pdfSelectionControls = document.getElementById('pdf-selection-controls');
+        const btnSelectAll = document.getElementById('btn-select-all-pages');
+        const btnDeselectAll = document.getElementById('btn-deselect-all-pages');
+        
+        const latexOutput = document.getElementById('latex-output');
+        const loader = document.getElementById('loader');
+        const loaderText = document.getElementById('loader-text');
+        const loaderProgress = document.getElementById('loader-progress');
+        const btnDownloadWord = document.getElementById('btn-download-word');
+        const currentModeBadge = document.getElementById('current-mode-badge');
+
+        const btnCompile = document.getElementById('btn-compile');
+        const btnSolutionDetail = document.getElementById('btn-solution-detail');
+        const btnSolutionFast = document.getElementById('btn-solution-fast');
+
+        const toastMessage = document.getElementById('toast-message');
+        const toastText = document.getElementById('toast-text');
+
+        // Helper: Show notifications
+        function showNotification(message, duration = 3000) {
+            toastText.textContent = message;
+            toastMessage.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toastMessage.classList.add('translate-y-20', 'opacity-0');
+            }, duration);
+        }
+
+        // --- TAB BAR CONTROL FOR RAW VS RENDERED PREVIEW ---
+        function switchOutputTab(tab) {
+            const rawTab = document.getElementById('tab-btn-raw');
+            const renderedTab = document.getElementById('tab-btn-rendered');
+            const latexTextarea = document.getElementById('latex-output');
+            const previewPane = document.getElementById('math-preview-pane');
+
+            if (tab === 'raw') {
+                rawTab.className = "px-4 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 focus:outline-none transition-all flex items-center gap-1.5";
+                renderedTab.className = "px-4 py-2 text-xs font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none transition-all flex items-center gap-1.5";
+                latexTextarea.classList.remove('hidden');
+                previewPane.classList.add('hidden');
+            } else {
+                renderedTab.className = "px-4 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 focus:outline-none transition-all flex items-center gap-1.5";
+                rawTab.className = "px-4 py-2 text-xs font-bold border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none transition-all flex items-center gap-1.5";
+                latexTextarea.classList.add('hidden');
+                previewPane.classList.remove('hidden');
+                
+                // Update rendering screen dynamically
+                updateMathPreview();
+            }
+        }
+
+        // Parser và căn chỉnh tài liệu xem trước đạt chuẩn Đề thi của Bộ Giáo dục
+        function updateMathPreview() {
+            const latexText = document.getElementById('latex-output').value;
+            const previewContent = document.getElementById('math-preview-content');
+            
+            if (!latexText.trim()) {
+                previewContent.innerHTML = '<span class="text-gray-400 italic">Chưa có nội dung để xem trước. Nhấn biên dịch để nạp dữ liệu.</span>';
+                return;
+            }
+
+            // Tiền xử lý: xóa bỏ khoảng trắng rỗng chồng chéo, tránh dãn trang không đều
+            let cleanedText = latexText
+                .replace(/```latex/g, "")
+                .replace(/```tex/g, "")
+                .replace(/```/g, "")
+                .trim();
+
+            let lines = cleanedText.split('\n');
+            let formattedHtmlLines = [];
+            let i = 0;
+
+            while (i < lines.length) {
+                let line = lines[i].trim();
+
+                // Bỏ dòng rỗng không cần thiết
+                if (!line) {
+                    formattedHtmlLines.push('<div class="h-3"></div>');
+                    i++;
+                    continue;
+                }
+
+                // Chuyển đổi thẻ định vị hình vẽ [HINH_VE] thành chuẩn Bộ Giáo dục
+                if (line.toUpperCase() === '[HINH_VE]') {
+                    formattedHtmlLines.push('<div class="text-center text-red-600 font-bold my-4 py-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-xl tracking-widest text-sm select-none">HÌNH VẼ</div>');
+                    i++;
+                    continue;
+                }
+
+                // Chuẩn hóa và làm nổi bật phân đoạn **Lời giải**
+                if (line.toLowerCase() === 'lời giải' || line.startsWith('**Lời giải**') || line.startsWith('\\textbf{Lời giải}')) {
+                    formattedHtmlLines.push('<div class="font-bold text-slate-950 dark:text-slate-100 mt-3 mb-1.5 flex items-center gap-2"><span class="w-1.5 h-4 bg-indigo-500 rounded-full inline-block"></span>Lời giải</div>');
+                    i++;
+                    continue;
+                }
+
+                // Định vị tiêu đề câu hỏi (Ví dụ: Câu 1. hoặc Câu 2:)
+                let questionMatch = line.match(/^(Câu\s+\d+[\.\:]?)\s*(.*)/i);
+                if (questionMatch) {
+                    let qNum = questionMatch[1];
+                    let qText = questionMatch[2];
+                    qText = applyInlineTextDecorations(qText);
+                    formattedHtmlLines.push(`<div class="font-bold text-slate-900 dark:text-slate-100 mt-4 mb-2"><span class="text-indigo-600">${qNum}</span> ${qText}</div>`);
+                    i++;
+                    continue;
+                }
+
+                // Phân tích hàng loạt lựa chọn trắc nghiệm A, B, C, D trên một dòng
+                let multipleOptionsMatch = line.match(/(?:\[U\])?A(?:\[\/U\])?\.\s+.*?(?:\[U\])?B(?:\[\/U\])?\.\s+.*?(?:\[U\])?C(?:\[\/U\])?\.\s+.*?(?:\[U\])?D(?:\[\/U\])?\.\s+.*/);
+                if (multipleOptionsMatch) {
+                    let parsedLayout = tryFormatGridOptions(line);
+                    if (parsedLayout) {
+                        formattedHtmlLines.push(parsedLayout);
+                        i++;
+                        continue;
+                    }
+                }
+
+                // Định dạng trắc nghiệm Đúng / Sai: a), b), c), d)
+                let trueFalseMatch = line.match(/^((?:\[U\])?[a-d](?:\[\/U\])?[\)\.])\s*(.*)/i);
+                if (trueFalseMatch) {
+                    let optLabel = trueFalseMatch[1];
+                    let optValue = trueFalseMatch[2];
+                    optLabel = applyInlineTextDecorations(optLabel);
+                    optValue = applyInlineTextDecorations(optValue);
+                    formattedHtmlLines.push(`<div class="flex items-start gap-2 pl-5 py-1 text-slate-800 dark:text-slate-200"><span class="font-semibold text-indigo-500 min-w-[20px]">${optLabel}</span><span class="flex-1">${optValue}</span></div>`);
+                    i++;
+                    continue;
+                }
+
+                // Các dòng thông thường chứa công thức toán
+                let lineFormatted = applyInlineTextDecorations(line);
+                formattedHtmlLines.push(`<div class="text-slate-800 dark:text-slate-200 leading-relaxed py-0.5">${lineFormatted}</div>`);
+                i++;
+            }
+
+            // Gắn vào vùng hiển thị
+            previewContent.innerHTML = formattedHtmlLines.join('\n');
+            
+            // Kích hoạt MathJax biên dịch lại
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([previewContent]).catch((err) => console.log(err));
+            }
+        }
+
+        // Thay thế các cấu trúc con (underline và bold)
+        function applyInlineTextDecorations(str) {
+            return str
+                .replace(/\[U\]/g, '<span class="underline font-bold text-indigo-600">')
+                .replace(/\[\/U\]/g, '</span>');
+        }
+
+        // Tự động căn chỉnh phương án A, B, C, D theo chuẩn tối ưu của Bộ Giáo dục
+        function tryFormatGridOptions(line) {
+            const regex = /((?:\[U\])?([A-D])(?:\[\/U\])?\.\s+)(.*?)(?=\s*(?:\[U\])?[A-D](?:\[\/U\])?\.\s+|$)/g;
+            let options = [];
+            let match;
+            while ((match = regex.exec(line)) !== null) {
+                options.push({
+                    prefix: match[1],
+                    letter: match[2],
+                    text: match[3].trim()
+                });
+            }
+
+            if (options.length === 4) {
+                let maxLen = Math.max(...options.map(o => o.text.length));
+                let gridClass = "grid grid-cols-1 sm:grid-cols-4 gap-4"; // Mặc định 4 cột (ngắn)
+                if (maxLen > 25 && maxLen <= 55) {
+                    gridClass = "grid grid-cols-1 sm:grid-cols-2 gap-3"; // Chia 2 hàng x 2 cột
+                } else if (maxLen > 55) {
+                    gridClass = "grid grid-cols-1 gap-2"; // 4 hàng dọc thẳng hàng
+                }
+
+                let html = `<div class="${gridClass} pl-5 py-2 text-slate-800 dark:text-slate-200">`;
+                options.forEach(o => {
+                    let fullLabel = applyInlineTextDecorations(o.prefix);
+                    html += `<div class="flex items-start gap-1.5"><span class="font-bold min-w-[18px]">${fullLabel}</span><span>${o.text}</span></div>`;
+                });
+                html += `</div>`;
+                return html;
+            }
+            return null;
+        }
+
+        // --- CLIPBOARD PASTE MANAGEMENT ---
+        btnPaste.addEventListener('click', async () => {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                let foundImage = false;
+                for (const item of clipboardItems) {
+                    for (const type of item.types) {
+                        if (type.startsWith('image/')) {
+                            const blob = await item.getType(type);
+                            appState.pasteCounter++;
+                            appState.uploadedFileName = `Anh_Dan_${appState.pasteCounter}`; // Tự động đổi tên theo thứ tự dán
+                            processImageBlob(blob);
+                            foundImage = true;
+                            showNotification("Đã dán ảnh từ Clipboard thành công!");
+                            break;
+                        }
+                    }
+                }
+                if (!foundImage) {
+                    showNotification("Không tìm thấy tệp ảnh nào trong clipboard.");
+                }
+            } catch (err) {
+                showNotification("Để dán nhanh, hãy nhấn Ctrl + V trực tiếp trên trang web.");
+            }
+        });
+
+        // Global key paste listener (Ctrl+V)
+        window.addEventListener('paste', (event) => {
+            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    appState.pasteCounter++;
+                    appState.uploadedFileName = `Anh_Dan_${appState.pasteCounter}`; // Tự động đổi tên theo thứ tự dán
+                    processImageBlob(blob);
+                    showNotification("Đã phát hiện và dán ảnh tự động từ Clipboard!");
+                    event.preventDefault();
+                    break;
+                }
+            }
+        });
+
+        // Drag & Drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-indigo-500', 'bg-indigo-50/50');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/50');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/50');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // Handle selected / dragged file
+        function handleFile(file) {
+            appState.uploadedFileName = file.name; // Lưu lại tên của file gốc được tải lên
+            if (file.type.startsWith('image/')) {
+                processImageBlob(file);
+            } else if (file.type === 'application/pdf') {
+                processPdfFile(file);
+            } else {
+                showNotification("Vui lòng tải lên ảnh hoặc file PDF.");
+            }
+        }
+
+        // Process image to Base64
+        function processImageBlob(blob) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                appState.activeImageBase64 = e.target.result.split(',')[1];
+                appState.pdfDocument = null; // Clear PDF state
+                appState.selectedPages = [];
+                
+                // Show preview
+                previewPlaceholder.classList.add('hidden');
+                pdfPreviewContainer.classList.add('hidden');
+                pdfSelectionControls.classList.add('hidden');
+                imagePreview.src = e.target.result;
+                imagePreview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(blob);
+        }
+
+        // Process PDF File with PDF.js
+        function processPdfFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const typedarray = new Uint8Array(e.target.result);
+                pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                    appState.pdfDocument = pdf;
+                    appState.pdfTotalPages = pdf.numPages;
+                    appState.pdfCurrentPage = 1;
+                    appState.activeImageBase64 = null;
+                    
+                    // Default select all pages at first
+                    appState.selectedPages = Array.from({length: pdf.numPages}, (_, i) => i + 1);
+                    
+                    previewPlaceholder.classList.add('hidden');
+                    imagePreview.classList.add('hidden');
+                    pdfPreviewContainer.classList.remove('hidden');
+                    pdfSelectionControls.classList.remove('hidden');
+                    
+                    buildPagesGrid();
+                    renderPdfPage(1);
+                }).catch(err => {
+                    console.error("Lỗi tải PDF:", err);
+                    showNotification("Có lỗi xảy ra khi phân tích PDF.");
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Build grid of checkboxes for each page
+        function buildPagesGrid() {
+            pdfPagesGrid.innerHTML = '';
+            for (let i = 1; i <= appState.pdfTotalPages; i++) {
+                const label = document.createElement('label');
+                label.className = "flex items-center space-x-1 bg-white border border-gray-200 rounded px-2 py-1 text-xs cursor-pointer hover:bg-indigo-50 transition-colors";
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = appState.selectedPages.includes(i);
+                checkbox.className = "rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5";
+                checkbox.dataset.page = i;
+                
+                checkbox.addEventListener('change', (e) => {
+                    const pageNum = parseInt(e.target.dataset.page);
+                    if (e.target.checked) {
+                        if (!appState.selectedPages.includes(pageNum)) {
+                            appState.selectedPages.push(pageNum);
+                        }
+                    } else {
+                        appState.selectedPages = appState.selectedPages.filter(p => p !== pageNum);
+                    }
+                    // Sort page list ascending to ensure output in sequential order
+                    appState.selectedPages.sort((a, b) => a - b);
+                });
+
+                const textSpan = document.createElement('span');
+                textSpan.textContent = `T. ${i}`;
+                textSpan.className = "font-medium text-gray-700";
+
+                label.appendChild(checkbox);
+                label.appendChild(textSpan);
+                pdfPagesGrid.appendChild(label);
+            }
+        }
+
+        // Action handles for Page Selection controls
+        btnSelectAll.addEventListener('click', () => {
+            appState.selectedPages = Array.from({length: appState.pdfTotalPages}, (_, i) => i + 1);
+            Array.from(pdfPagesGrid.querySelectorAll('input[type="checkbox"]')).forEach(cb => cb.checked = true);
+            showNotification(`Đã chọn toàn bộ ${appState.pdfTotalPages} trang.`);
+        });
+
+        btnDeselectAll.addEventListener('click', () => {
+            appState.selectedPages = [];
+            Array.from(pdfPagesGrid.querySelectorAll('input[type="checkbox"]')).forEach(cb => cb.checked = false);
+            showNotification("Đã bỏ chọn tất cả các trang.");
+        });
+
+        // Render specific PDF page to canvas
+        function renderPdfPage(pageNum) {
+            if (!appState.pdfDocument) return;
+            
+            appState.pdfCurrentPage = pageNum;
+            pdfPageNumSpan.textContent = `Trang ${pageNum} / ${appState.pdfTotalPages}`;
+            
+            // Enable/disable page buttons
+            pdfPrevBtn.disabled = pageNum <= 1;
+            pdfNextBtn.disabled = pageNum >= appState.pdfTotalPages;
+
+            appState.pdfDocument.getPage(pageNum).then(page => {
+                const viewport = page.getViewport({ scale: 1.5 }); // Optimal rendering scale for UI preview
+                const context = pdfCanvas.getContext('2d');
+                pdfCanvas.height = viewport.height;
+                pdfCanvas.width = viewport.width;
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                
+                page.render(renderContext);
+            });
+        }
+
+        // PDF Page Navigation Buttons
+        pdfPrevBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (appState.pdfCurrentPage > 1) {
+                renderPdfPage(appState.pdfCurrentPage - 1);
+            }
+        });
+
+        pdfNextBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (appState.pdfCurrentPage < appState.pdfTotalPages) {
+                renderPdfPage(appState.pdfCurrentPage + 1);
+            }
+        });
+
+        // Helper: Asynchronously fetch base64 data for a specific page of PDF (at high resolution for optimal OCR)
+        function captureHighResPageBase64(pageNum) {
+            return new Promise((resolve, reject) => {
+                if (!appState.pdfDocument) {
+                    reject(new Error("Không có tài liệu PDF nào được load."));
+                    return;
+                }
+                appState.pdfDocument.getPage(pageNum).then(page => {
+                    const scale = 2.0; // Higher scale for Gemini OCR processing
+                    const viewport = page.getViewport({ scale: scale });
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    const context = canvas.getContext('2d');
+                    
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    
+                    page.render(renderContext).promise.then(() => {
+                        const dataUrl = canvas.toDataURL('image/png');
+                        resolve(dataUrl.split(',')[1]); // Resolve base64 data only
+                    }).catch(err => reject(err));
+                }).catch(err => reject(err));
+            });
+        }
+
+
+        // Exponential backoff API call
+        async function callGeminiApiWithRetry(payload, maxRetries = 5) {
+            let delay = 1000;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (response.ok) {
+                        return await response.json();
+                    }
+                } catch (e) {
+                    // Fail silently, retry next loop
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential increase
+            }
+            throw new Error("Không thể kết nối đến máy chủ API Gemini sau nhiều lần thử.");
+        }
+
+        // Dynamic prompt builder for specific mode
+        function buildPromptForMode(mode) {
+            const generalDirectives = `
+BẠN LÀ MỘT TRỢ LÝ GIÁO VIÊN CHUYÊN GIA BIÊN SOẠN VÀ GIẢI TOÁN HỌC MẠNH MẼ NHẤT.
+HÃY PHÂN TÍCH HÌNH ẢNH CỦA ĐỀ TOÁN VÀ THỰC HIỆN ĐÚNG THEO CÁC NGUYÊN TẮC QUAN TRỌNG SAU:
+
+1. QUY TẮC CÔNG THỨC TOÁN HỌC:
+- Mọi ký hiệu, biến số và công thức toán học PHẢI được viết dưới dạng công thức LaTeX.
+- Viết công thức nội dòng giữa cặp ký tự $...$ (ví dụ: $x^2 + 2x = 0$, $f(x)$).
+- Viết công thức nổi bật trên dòng riêng giữa cặp ký tự $$...$$(ví dụ:$$\\int_{a}^{b} f(x) dx$$).
+- Đảm bảo mã LaTeX đúng cú pháp tuyệt đối để MathType trong Word có thể nhận diện và chuyển đổi ngay tức khắc.
+
+2. NGUYÊN TẮC CHẶT CHẼ VỀ TRANG TRÌNH BÀY (CỰC KỲ QUAN TRỌNG):
+- KHÔNG ĐƯỢC tự ý chèn bất kỳ Header, Footer nào vào nội dung phản hồi.
+- KHÔNG ĐƯỢC thêm dòng ghi chú chỉ số trang, "Bắt đầu trang", "Kết thúc trang", "Trang 1", "Trang 2" hay số thứ tự trang.
+- KHÔNG ĐƯỢC thêm bất kỳ lời nhắn hướng dẫn nào ở đầu hoặc cuối câu trả lời (Ví dụ không thêm "Dưới đây là lời giải...", "Chúc bạn học tốt...").
+- Các câu hỏi phải được biên soạn một cách liên tục và liền mạch thành một dòng văn bản tự nhiên như tài liệu gốc.
+
+3. QUY TẮC NHẬN DẠNG VÀ ĐỊNH VỊ HÌNH VẼ TOÁN HỌC (CỰC KỲ QUAN TRỌNG):
+- Hãy quét kỹ toàn bộ hình ảnh để nhận dạng các loại hình vẽ toán học như: hình vẽ hình học (tam giác, hình lập phương...), hình vẽ đồ thị, hình vẽ bảng biến thiên, hình vẽ bảng số liệu/bảng thông tin.
+- Khi xác định được vị trí xuất hiện của hình vẽ đó trong tài liệu gốc, bạn PHẢI chèn một dòng riêng biệt chứa chính xác thẻ sau để hệ thống định vị:
+[HINH_VE]
+- Tuyệt đối không vẽ lại hình vẽ bằng ký tự thô hay vẽ bảng biến thiên phức tạp bằng các dòng gạch ngang thủ công. Chỉ cần chèn thẻ [HINH_VE] ở đúng vị trí tương ứng khoa học và chính xác.
+
+4. QUY TẮC GẠCH CHÂN ĐÁP ÁN ĐÚNG TRỰC TIẾP TRÊN ĐỀ BÀI:
+- Khi phát hiện thấy phương án đúng trong trắc nghiệm 4 lựa chọn (A, B, C, D) hoặc ý đúng trong trắc nghiệm Đúng/Sai (a, b, c, d) ở đề bài trích dẫn, bạn CHỈ ĐƯỢC phép gạch chân đúng ký tự chữ cái đáp án đó (A, B, C, D, a, b, c, d) bằng cách đặt thẻ [U]...[/U] bao quanh duy nhất chữ cái đó.
+- TUYỆT ĐỐI KHÔNG được gạch chân toàn bộ nội dung của phương án/ý đúng. Chỉ đặt thẻ gạch chân cho duy nhất chữ cái đáp án.
+- Ví dụ mẫu trắc nghiệm 4 phương án:
+  "Câu 1. Tìm tập xác định của hàm số $y = \\frac{1}{x}$.\\n[U]A[/U]. $D = \\mathbb{R} \\setminus \\{0\\}$.\\nB. $D = \\mathbb{R}$.\\nC. $D = (0; +\\infty)$.\\nD. $D = [0; +\\infty)$."
+- Ví dụ mẫu trắc nghiệm Đúng/Sai:
+  "Câu 2. Cho hàm số...\\n[U]a[/U]) Hàm số đồng biến trên $\\mathbb{R}$.\\nb) Hàm số nghịch biến...\\n[U]c[/U]) Đồ thị cắt trục hoành tại một điểm...\\nd) Đồ thị có ba điểm cực trị..."
+
+5. QUY TẮC PHÂN LOẠI CÂU HỎI VÀ ĐỊNH DẠNG CHẾ ĐỘ:
+`;
+
+            const mode1Prompt = `
+CHẾ ĐỘ: CHỈ TRÍCH XUẤT ĐỀ BÀI SANG LATEX
+- Trích xuất toàn bộ câu hỏi và các phương án từ hình ảnh một cách trung thực nhất.
+- Chuyển toàn bộ các chữ cái câu hỏi (ví dụ: Câu 1, Câu 2...) và phương án lựa chọn A. B. C. D. hoặc a) b) c) d) sang định dạng text chuẩn cùng các công thức toán $...$.
+- KHÔNG tự động tạo lời giải, chỉ dịch đề bài toán học sang LaTeX.
+- Nhớ xác định vị trí hình vẽ hình học, đồ thị, bảng biến thiên, bảng số liệu và chèn thẻ [HINH_VE] trên dòng riêng biệt.
+- KHÔNG thực hiện gạch chân đáp án ở chế độ này.
+`;
+
+            const mode2Prompt = `
+CHẾ ĐỘ: GIẢI CHI TIẾT TỪNG CÂU HỎI KÈM TRÍCH ĐỀ BÀI
+Bạn là một giáo viên chuyên gia giải toán. Hãy đọc hình ảnh, thực hiện giải chi tiết từng câu hỏi theo đúng cấu trúc sau:
+
+Cấu trúc trình bày cho MỖI câu hỏi:
+Bước 1: Trích nguyên vẹn ĐỀ BÀI (bao gồm cả các phương án lựa chọn A, B, C, D hoặc a, b, c, d nếu có).
+- Tại phần trích đề bài này, bạn PHẢI tự động phát hiện phương án/ý đúng và gạch chân duy nhất chữ cái của đáp án đúng đó bằng cách bao bọc nó trong thẻ [U]...[/U].
+  * Với câu hỏi trắc nghiệm 4 lựa chọn (A, B, C, D): Gạch chân chữ cái đáp án đúng. Ví dụ: [U]A[/U]. $D = \\mathbb{R}$.
+  * Với câu hỏi trắc nghiệm Đúng/Sai (các ý a, b, c, d): Gạch chân các chữ cái của những ý ĐÚNG. Ví dụ: [U]a[/U]) Hàm số đồng biến... b) Hàm số nghịch biến... [U]c[/U]) Đồ thị cắt...
+- Định vị hình vẽ: Chèn thẻ [HINH_VE] trên dòng riêng biệt tại đúng vị trí khoa học của hình vẽ hình học, đồ thị, bảng biến thiên, bảng số liệu nếu đề bài có chứa.
+
+Bước 2: Viết tiêu đề phân đoạn lời giải chính xác là:
+**Lời giải**
+(Viết in đậm hoàn toàn, không thêm dấu hai chấm hay ký tự đặc biệt khác).
+
+Bước 3: Trình bày Lời giải chi tiết của câu hỏi bằng công thức toán LaTeX chuẩn. Hãy phân tích kỹ lưỡng hình ảnh toán học (hình vẽ hình học, đồ thị, bảng biến thiên, bảng số liệu) nếu có để đưa ra lập luận và tính toán hoàn toàn chính xác.
+
+Bước 4: Chốt đáp án đúng ở cuối phần lời giải của câu hỏi đó:
+- Đối với câu hỏi trắc nghiệm 4 phương án (A, B, C, D): Ghi dòng "Chọn đáp án: X" (với X là chữ cái đáp án đúng, ví dụ: Chọn đáp án: A).
+- Đối với câu hỏi trắc nghiệm Đúng/Sai (các ý a, b, c, d):
+  * Chốt rõ ràng từng ý đúng hay sai tương ứng. Ví dụ: "ý a) đúng, ý b) sai, ý c) đúng, ý d) sai."
+  * Sau đó ghi dòng: "Các ý đúng: a, c" (hoặc danh sách các ý đúng tương ứng).
+- Đối với câu hỏi trả lời ngắn: Ghi kết quả ở dưới câu hỏi là dòng: "Đáp án: [Kết quả]" (Ví dụ: Đáp án: $x = 5$).
+`;
+
+            const mode3Prompt = `
+CHẾ ĐỘ: GIẢI NHANH TỪNG CÂU HỎI KÈM TRÍCH ĐỀ BÀI (CHỈ CHỐT ĐÁP ÁN)
+Bạn là chuyên gia giải nhanh trắc nghiệm toán học. Hãy thực hiện giải nhanh từng câu hỏi theo đúng cấu trúc sau:
+
+Cấu trúc trình bày cho MỖI câu hỏi:
+Bước 1: Trích nguyên vẹn ĐỀ BÀI (bao gồm cả các phương án lựa chọn A, B, C, D hoặc a, b, c, d nếu có).
+- Tại phần trích đề bài này, bạn PHẢI tự động phát hiện phương án/ý đúng và gạch chân duy nhất chữ cái của đáp án đúng đó bằng cách bao bọc nó trong thẻ [U]...[/U].
+  * Với câu hỏi trắc nghiệm 4 lựa chọn (A, B, C, D): Gạch chân chữ cái đáp án đúng. Ví dụ: [U]A[/U]. $D = \\mathbb{R}$.
+  * Với câu hỏi trắc nghiệm Đúng/Sai (các ý a, b, c, d): Gạch chân các chữ cái của những ý ĐÚNG. Ví dụ: [U]a[/U]) Hàm số đồng biến... b) Hàm số nghịch biến... [U]c[/U]) Đồ thị cắt...
+- Định vị hình vẽ: Chèn thẻ [HINH_VE] trên dòng riêng biệt tại đúng vị trí khoa học của hình vẽ hình học, đồ thị, bảng biến thiên, bảng số liệu nếu đề bài có chứa.
+
+Bước 2: Viết tiêu đề phân đoạn lời giải chính xác là:
+**Lời giải**
+(Viết in đậm hoàn toàn, không thêm dấu hai chấm hay ký tự đặc biệt khác).
+
+Bước 3: Đi trực tiếp vào phần chốt đáp án cực kỳ ngắn gọn và nhanh chóng (không cần trình bày lập luận dài dòng):
+- Đối với câu hỏi trắc nghiệm 4 phương án (A, B, C, D): Ghi dòng "Chọn đáp án: X" (với X là chữ cái đáp án đúng, ví dụ: Chọn đáp án: A).
+- Đối với câu hỏi trắc nghiệm Đúng/Sai (các ý a, b, c, d):
+  * Chốt rõ ràng từng ý đúng hay sai tương ứng. Ví dụ: "ý a) đúng, ý b) sai, ý c) đúng, ý d) sai."
+  * Sau đó ghi dòng: "Các ý đúng: a, c" (hoặc danh sách các ý đúng tương ứng).
+- Đối với câu hỏi trả lời ngắn: Ghi kết quả là dòng: "Đáp án: [Kết quả]" (Ví dụ: Đáp án: $x = 5$).
+`;
+
+            if (mode === 'compile') return generalDirectives + mode1Prompt;
+            if (mode === 'detail') return generalDirectives + mode2Prompt;
+            if (mode === 'fast') return generalDirectives + mode3Prompt;
+            return generalDirectives + mode1Prompt;
+        }
+
+        // Sequential multi-page task trigger
+        async function runCompilation(mode) {
+            const isPdf = appState.pdfDocument !== null;
+            
+            // Check inputs
+            if (isPdf && appState.selectedPages.length === 0) {
+                showNotification("Vui lòng chọn ít nhất một trang để xử lý.");
+                return;
+            }
+            if (!isPdf && !appState.activeImageBase64) {
+                showNotification("Vui lòng tải tệp PDF hoặc dán ảnh vào trước!");
+                return;
+            }
+
+            // Init state & loading UI
+            loader.classList.remove('hidden');
+            let badgeText = "Đang xử lý...";
+            
+            if (mode === 'compile') badgeText = "Chế độ: Biên dịch LaTeX";
+            else if (mode === 'detail') badgeText = "Chế độ: Giải chi tiết";
+            else if (mode === 'fast') badgeText = "Chế độ: Giải nhanh";
+
+            currentModeBadge.textContent = badgeText;
+            currentModeBadge.className = "text-xs bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-full border border-indigo-200 animate-pulse";
+            
+            latexOutput.value = ""; // Clear completely as requested
+            appState.compiledContent = "";
+
+            const totalPagesToProcess = isPdf ? appState.selectedPages.length : 1;
+            const promptText = buildPromptForMode(mode);
+
+            try {
+                // Loop sequentially over each target page
+                for (let index = 0; index < totalPagesToProcess; index++) {
+                    let currentPageNum = isPdf ? appState.selectedPages[index] : 1;
+                    
+                    // Update state progress
+                    loaderText.textContent = `Đang xử lý dữ liệu: Trang ${currentPageNum}`;
+                    loaderProgress.textContent = `Tiến độ: ${index + 1} / ${totalPagesToProcess} trang`;
+                    
+                    let targetBase64 = "";
+                    if (isPdf) {
+                        // Render page in high-res on-the-fly to conserve memory and preserve CPU
+                        targetBase64 = await captureHighResPageBase64(currentPageNum);
+                    } else {
+                        targetBase64 = appState.activeImageBase64;
+                    }
+
+                    // Construct single page API payload
+                    const payload = {
+                        contents: [
+                            {
+                                parts: [
+                                    { text: promptText },
+                                    {
+                                        inlineData: {
+                                            mimeType: "image/png",
+                                            data: targetBase64
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    };
+
+                    // Run call
+                    const responseData = await callGeminiApiWithRetry(payload);
+                    const pageText = responseData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+                    if (pageText.trim()) {
+                        // Append continuous LaTeX without dividers as requested by user
+                        let formattedPageOutput = pageText.trim() + "\n\n";
+                        
+                        appState.compiledContent += formattedPageOutput;
+                        latexOutput.value = appState.compiledContent;
+                    }
+                }
+
+                if (appState.compiledContent.trim()) {
+                    btnDownloadWord.disabled = false;
+                    // Trigger sync to the live rendered view as well
+                    updateMathPreview();
+                    showNotification("Hoàn thành biên dịch toàn bộ dữ liệu thành công!");
+                } else {
+                    showNotification("Không trích xuất được dữ liệu toán học hợp lệ.");
+                }
+
+            } catch (err) {
+                console.error("Lỗi biên dịch hàng loạt:", err);
+                showNotification("Có lỗi xảy ra: " + err.message);
+                latexOutput.value += `\nLỖI TRONG QUÁ TRÌNH BIÊN DỊCH: ${err.message}\n`;
+            } finally {
+                loader.classList.add('hidden');
+                currentModeBadge.classList.remove('animate-pulse');
+            }
+        }
+
+        // Set action triggers
+        btnCompile.addEventListener('click', () => runCompilation('compile'));
+        btnSolutionDetail.addEventListener('click', () => runCompilation('detail'));
+        btnSolutionFast.addEventListener('click', () => runCompilation('fast'));
+
+
+        // --- SPAN TOKENIZER FOR HIGH-FIDELITY NESTED STYLING ---
+        function parseLineToSpans(textLine) {
+            let spans = [];
+            
+            function parseSub(str, state = { bold: false, underline: false, color: null }) {
+                let i = 0;
+                const length = str.length;
+                
+                while (i < length) {
+                    let nextMathDisplay = str.indexOf('$$', i);
+                    let nextMathInline = str.indexOf('$', i);
+                    let nextUOpen = str.indexOf('[U]', i);
+                    let nextUClose = str.indexOf('[/U]', i);
+                    let nextBoldOpen = str.indexOf('**', i);
+                    let nextTexBoldOpen = str.indexOf('\\textbf{', i);
+                    
+                    if (nextMathDisplay === -1) nextMathDisplay = Infinity;
+                    if (nextMathInline === -1) nextMathInline = Infinity;
+                    if (nextUOpen === -1) nextUOpen = Infinity;
+                    if (nextUClose === -1) nextUClose = Infinity;
+                    if (nextBoldOpen === -1) nextBoldOpen = Infinity;
+                    if (nextTexBoldOpen === -1) nextTexBoldOpen = Infinity;
+                    
+                    if (nextMathInline === nextMathDisplay) {
+                        nextMathInline = str.indexOf('$', nextMathDisplay + 2);
+                        if (nextMathInline === -1) nextMathInline = Infinity;
+                    }
+                    
+                    const minPos = Math.min(nextMathDisplay, nextMathInline, nextUOpen, nextUClose, nextBoldOpen, nextTexBoldOpen);
+                    
+                    if (minPos === Infinity) {
+                        const remaining = str.substring(i);
+                        if (remaining) {
+                            spans.push({
+                                text: remaining,
+                                bold: state.bold,
+                                underline: state.underline,
+                                color: state.color
+                            });
+                        }
+                        break;
+                    }
+                    
+                    if (minPos > i) {
+                        spans.push({
+                            text: str.substring(i, minPos),
+                            bold: state.bold,
+                            underline: state.underline,
+                            color: state.color
+                        });
+                    }
+                    
+                    if (minPos === nextMathDisplay) {
+                        const closeIdx = str.indexOf('$$', nextMathDisplay + 2);
+                        if (closeIdx !== -1) {
+                            const mathContent = str.substring(nextMathDisplay, closeIdx + 2);
+                            spans.push({
+                                text: mathContent,
+                                bold: true,
+                                underline: state.underline,
+                                color: "10B981" // Green for math formulas to look professional
+                            });
+                            i = closeIdx + 2;
+                        } else {
+                            spans.push({
+                                text: "$$",
+                                bold: state.bold,
+                                underline: state.underline,
+                                color: state.color
+                            });
+                            i = nextMathDisplay + 2;
+                        }
+                    } else if (minPos === nextMathInline) {
+                        const closeIdx = str.indexOf('$', nextMathInline + 1);
+                        if (closeIdx !== -1) {
+                            const mathContent = str.substring(nextMathInline, closeIdx + 1);
+                            spans.push({
+                                text: mathContent,
+                                bold: true,
+                                underline: state.underline,
+                                color: "4F46E5" // Purple for inline math formula
+                            });
+                            i = closeIdx + 1;
+                        } else {
+                            spans.push({
+                                text: "$",
+                                bold: state.bold,
+                                underline: state.underline,
+                                color: state.color
+                            });
+                            i = nextMathInline + 1;
+                        }
+                    } else if (minPos === nextUOpen) {
+                        const closeIdx = str.indexOf('[/U]', nextUOpen + 3);
+                        if (closeIdx !== -1) {
+                            const innerStr = str.substring(nextUOpen + 3, closeIdx);
+                            parseSub(innerStr, { ...state, underline: true });
+                            i = closeIdx + 4;
+                        } else {
+                            i = nextUOpen + 3;
+                        }
+                    } else if (minPos === nextUClose) {
+                        i = nextUClose + 4;
+                    } else if (minPos === nextBoldOpen) {
+                        const closeIdx = str.indexOf('**', nextBoldOpen + 2);
+                        if (closeIdx !== -1) {
+                            const innerStr = str.substring(nextBoldOpen + 2, closeIdx);
+                            parseSub(innerStr, { ...state, bold: true });
+                            i = closeIdx + 2;
+                        } else {
+                            i = nextBoldOpen + 2;
+                        }
+                    } else if (minPos === nextTexBoldOpen) {
+                        const closeIdx = findMatchingBrace(str, nextTexBoldOpen + 8);
+                        if (closeIdx !== -1) {
+                            const innerStr = str.substring(nextTexBoldOpen + 8, closeIdx);
+                            parseSub(innerStr, { ...state, bold: true });
+                            i = closeIdx + 1;
+                        } else {
+                            i = nextTexBoldOpen + 8;
+                        }
+                    }
+                }
+            }
+            
+            function findMatchingBrace(str, startIdx) {
+                let depth = 1;
+                for (let j = startIdx; j < str.length; j++) {
+                    if (str[j] === '{') depth++;
+                    else if (str[j] === '}') {
+                        depth--;
+                        if (depth === 0) return j;
+                    }
+                }
+                return -1;
+            }
+            
+            // Normalize "Lời giải" to be formatted bold cleanly
+            let processedLine = textLine;
+            let trimmedLine = processedLine.trim();
+            if (trimmedLine === "Lời giải" || trimmedLine === "\\textbf{Lời giải}" || trimmedLine === "**Lời giải**") {
+                processedLine = "**Lời giải**";
+            } else if (trimmedLine.startsWith("Lời giải ") || trimmedLine.startsWith("Lời giải:")) {
+                let separator = trimmedLine.startsWith("Lời giải:") ? 9 : 8;
+                processedLine = "**Lời giải** " + trimmedLine.substring(separator).trim();
+            } else if (trimmedLine.startsWith("\\textbf{Lời giải}")) {
+                processedLine = "**Lời giải** " + trimmedLine.substring(17).trim();
+            } else if (trimmedLine.startsWith("**Lời giải**")) {
+                processedLine = "**Lời giải** " + trimmedLine.substring(12).trim();
+            }
+            
+            parseSub(processedLine);
+            return spans;
+        }
+
+
+        // --- WORD EXPORT (.DOCX) - ROBUST IMPLEMENTATION ---
+
+        function buildParagraphFromMarkup(textLine) {
+            const { Paragraph, TextRun } = docx;
+            const spans = parseLineToSpans(textLine);
+            const runs = spans.map(span => {
+                return new TextRun({
+                    text: span.text,
+                    font: "Times New Roman",
+                    size: 24, // 12pt in Word
+                    bold: span.bold || undefined,
+                    underline: span.underline ? { type: "single" } : undefined,
+                    color: span.color || undefined
+                });
+            });
+
+            return new Paragraph({
+                children: runs,
+                spacing: {
+                    after: 120, // 6pt spacing
+                    line: 288,  // 1.2 spacing
+                }
+            });
+        }
+
+        // Lấy tên tệp xuất thông minh dựa trên file đã nạp hoặc ảnh đã dán
+        function getExportFileName() {
+            if (!appState.uploadedFileName) {
+                return "Tai_Lieu_Toan_Hoc_Chuan_Tex.docx";
+            }
+            // Loại bỏ phần mở rộng của file cũ (như .pdf, .png, .jpg) và thay bằng .docx
+            let baseName = appState.uploadedFileName.replace(/\.[^/.]+$/, "");
+            return `${baseName}.docx`;
+        }
+
+        // Main Word Export Process
+        function exportToWord() {
+            if (!appState.compiledContent) {
+                showNotification("Vui lòng biên dịch dữ liệu trước khi tải về.");
+                return;
+            }
+
+            showNotification("Đang chuẩn bị tệp Word...");
+            const { Document, Packer, Paragraph, TextRun, AlignmentType } = docx;
+
+            const lines = appState.compiledContent.split('\n');
+            const wordParagraphs = [];
+
+            for (let line of lines) {
+                let trimmed = line.trim();
+                if (trimmed.startsWith('```')) continue;
+                
+                // CỰC KỲ QUAN TRỌNG: Phát hiện thẻ hình vẽ [HINH_VE] để định dạng căn giữa, in đậm, màu đỏ và viết IN HOA
+                if (trimmed.toUpperCase() === '[HINH_VE]') {
+                    wordParagraphs.push(new Paragraph({
+                        alignment: AlignmentType.CENTER, // CĂN GIỮA CHÍNH XÁC
+                        children: [
+                            new TextRun({
+                                text: "HÌNH VẼ",              // CHỮ IN HOA
+                                font: "Times New Roman",
+                                size: 24,                     // Cỡ chữ 12pt (Word size 24)
+                                bold: true,                   // IN ĐẬM
+                                color: "FF0000",              // MÀU ĐỎ rực rỡ
+                            })
+                        ],
+                        spacing: {
+                            before: 180, // Giãn dòng trên
+                            after: 180,  // Giãn dòng dưới
+                            line: 288,
+                        }
+                    }));
+                    continue;
+                }
+                
+                wordParagraphs.push(buildParagraphFromMarkup(line));
+            }
+
+            // Create document cleanly without any headers, footers or page numbering
+            const doc = new Document({
+                sections: [{
+                    properties: {
+                        header: undefined,
+                        footer: undefined,
+                    },
+                    children: wordParagraphs
+                }]
+            });
+
+            // Build file and save locally
+            Packer.toBlob(doc).then(blob => {
+                const finalFileName = getExportFileName();
+                saveAs(blob, finalFileName);
+                showNotification(`Tải tệp Word (${finalFileName}) thành công!`);
+            }).catch(error => {
+                console.error("Lỗi tạo tệp Word:", error);
+                showNotification("Có lỗi xảy ra khi tạo tệp Word.");
+            });
+        }
+
+        btnDownloadWord.addEventListener('click', exportToWord);
+    </script>
+</body>
+</html>
